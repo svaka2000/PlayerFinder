@@ -1,0 +1,68 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+}
+
+// Target MC version is overridable per build:
+//   ./gradlew build -Pminecraft_version=1.21.4 -Pfabric_api_version=0.119.2+1.21.4 -Pmodmenu_version=13.0.4
+def mcVersion = project.minecraft_version
+
+version = "${project.mod_version}+${mcVersion}"   // e.g. 1.0.0+1.21.11
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+// PlayerFinder is built almost entirely against stable, version-agnostic APIs (client commands, the
+// tab list, Gui.render, EntityRenderer.shouldRender, Player.getDisplayName) so the bulk of the mod
+// lives in src/main. The ONE API that genuinely diverges across these versions is how a keybind
+// category is created and named in Options -> Controls:
+//   1.21.4  -> new KeyMapping(..., "key.categories.<ns>.<path>")        (string category)
+//   1.21.10 -> KeyMapping.Category.register(ResourceLocation...)         (Category object)
+//   1.21.11 -> KeyMapping.Category.register(Identifier...)               (ResourceLocation renamed)
+// Written as plain compiled code so Loom remaps it to production (intermediary) names.
+def graphicsVariant = (mcVersion == '1.21.4') ? 'v1_21_4'
+        : (mcVersion == '1.21.11') ? 'v1_21_11'
+        : 'v1_21_10'   // default for 1.21.10 and other Category-era versions
+sourceSets.main.java.srcDir("src/${graphicsVariant}/java")
+
+repositories {
+    maven {
+        name = 'TerraformersMC'
+        url = 'https://maven.terraformersmc.com/releases/'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${mcVersion}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // Optional: compile against Mod Menu's API so PlayerFinder can add a config button to its mod list.
+    // Not bundled - the 'modmenu' entrypoint only activates when the player has Mod Menu installed.
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+}
+
+
+processResources {
+    def props = [
+            version      : project.version,
+            minecraft_dep: mcVersion
+    ]
+    inputs.properties(props)
+    filesMatching("fabric.mod.json") {
+        expand props
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+    it.options.encoding = "UTF-8"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withSourcesJar()
+}

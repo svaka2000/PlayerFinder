@@ -1,0 +1,8 @@
+{
+  "key.categories.playerfinder": "PlayerFinder",
+  "key.category.playerfinder.general": "PlayerFinder",
+  "key.playerfinder.toggle_highlight": "Toggle highlight",
+  "key.playerfinder.toggle_solo": "Toggle hide-others (solo)",
+  "key.playerfinder.toggle_hud": "Toggle online HUD",
+  "key.playerfinder.who_online": "Print who's online"
+}

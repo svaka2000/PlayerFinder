@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.playerfinder.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "PlayerNameMixin",
+    "EntityCullMixin",
+    "GuiHudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

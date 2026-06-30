@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "playerfinder",
+  "version": "${version}",
+  "name": "PlayerFinder",
+  "description": "Organize the players you care about into named groups (with nested sub-groups), then instantly see which of them are online, highlight their nametags, or hide everyone else from view. Import whole MCTiers tier lists (e.g. every T2 sword player) into a group in one command. Client-side & render-only: it reads only the in-game tab list and the public MCTiers API, sends no packets to the server, and grants no combat advantage (no X-ray/ESP — highlighting only recolors the nametags of players you can already see).",
+  "authors": [ "LBmods" ],
+  "contact": {
+    "homepage": "https://lbmods-mc.vercel.app",
+    "sources": "https://github.com/svaka2000/PlayerFinder",
+    "issues": "https://github.com/svaka2000/PlayerFinder/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/playerfinder/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [ "com.playerfinder.PlayerFinderClient" ],
+    "modmenu": [ "com.playerfinder.compat.ModMenuIntegration" ]
+  },
+  "mixins": [ "playerfinder.mixins.json" ],
+  "depends": {
+    "fabricloader": ">=0.16",
+    "minecraft": "${minecraft_dep}",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
