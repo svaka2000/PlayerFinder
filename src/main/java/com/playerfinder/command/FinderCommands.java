@@ -10,22 +10,27 @@ import com.playerfinder.PlayerFinder;
 import com.playerfinder.config.FinderConfig;
 import com.playerfinder.config.FinderGroup;
 import com.playerfinder.config.FinderMember;
+import com.playerfinder.config.FinderServer;
 import com.playerfinder.core.ColorUtil;
 import com.playerfinder.core.GroupTree;
 import com.playerfinder.core.OnlineService;
 import com.playerfinder.core.Txt;
 import com.playerfinder.mctiers.MCTiersClient;
+import com.playerfinder.net.ServerPinger;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
@@ -60,6 +65,9 @@ public final class FinderCommands {
 
     private static final SuggestionProvider<FabricClientCommandSource> GAMEMODES =
             (c, b) -> SharedSuggestionProvider.suggest(MCTiersClient.GAMEMODES, b);
+
+    private static final SuggestionProvider<FabricClientCommandSource> SERVER_NAMES =
+            (c, b) -> SharedSuggestionProvider.suggest(cfg().servers.stream().map(s -> s.name).toList(), b);
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         LiteralCommandNode<FabricClientCommandSource> root = dispatcher.register(
@@ -108,6 +116,19 @@ public final class FinderCommands {
                 .then(literal("hud")
                     .then(literal("on").executes(c -> hud(c, true)))
                     .then(literal("off").executes(c -> hud(c, false))))
+                .then(literal("server")
+                    .then(literal("list").executes(FinderCommands::serverList))
+                    .then(literal("add")
+                        .then(argument("name", StringArgumentType.word())
+                            .then(argument("address", StringArgumentType.string())
+                                .executes(FinderCommands::serverAdd))))
+                    .then(literal("remove")
+                        .then(argument("name", StringArgumentType.word()).suggests(SERVER_NAMES)
+                            .executes(FinderCommands::serverRemove))))
+                .then(literal("scan")
+                    .executes(c -> scan(c, null))
+                    .then(argument("path", StringArgumentType.string()).suggests(PATHS)
+                        .executes(c -> scan(c, StringArgumentType.getString(c, "path")))))
                 .then(literal("import")
                     .then(literal("mctiers")
                         .then(argument("gamemode", StringArgumentType.word()).suggests(GAMEMODES)
@@ -148,11 +169,15 @@ public final class FinderCommands {
             "/pf group move <path> <parent>    - re-parent a group (parent = 'root' for top level)",
             "/pf add <path> <player>           - add a player to a group",
             "/pf remove <path> <player>        - remove a player",
-            "/pf online [path]                 - who from the group is on this server",
+            "/pf online [path]                 - who from the group is on THIS server",
             "/pf solo <path>                   - hide everyone except this group",
             "/pf unsolo                        - show everyone again",
             "/pf highlight on|off              - master highlight toggle",
             "/pf hud on|off                    - the on-screen online panel",
+            "Cross-server search:",
+            "/pf server add <name> <address>   - add a server to scan (host or host:port)",
+            "/pf server list / remove <name>   - manage the scan list",
+            "/pf scan [path]                   - search ALL listed servers for who's online",
             "/pf import mctiers <gamemode> [tier] [count] - import an MCTiers list",
             "   gamemodes: sword axe mace pot nethop smp uhc vanilla",
         };
@@ -379,6 +404,180 @@ public final class FinderCommands {
         info(c, Component.literal("Online HUD: ")
                 .append(Component.literal(on ? "ON" : "OFF").withStyle(on ? ChatFormatting.GREEN : ChatFormatting.RED)));
         return 1;
+    }
+
+    // ---- servers + cross-server scan -------------------------------------
+
+    private static int serverAdd(CommandContext<FabricClientCommandSource> c) {
+        String name = StringArgumentType.getString(c, "name");
+        String address = StringArgumentType.getString(c, "address");
+        String host = address;
+        int port = 25565;
+        int idx = address.lastIndexOf(':');
+        if (idx > 0 && idx < address.length() - 1) {
+            try {
+                port = Integer.parseInt(address.substring(idx + 1));
+                host = address.substring(0, idx);
+            } catch (NumberFormatException ignored) {
+                // not a port suffix — treat the whole thing as the host
+            }
+        }
+        host = host.trim();
+        if (host.isEmpty()) {
+            err(c, "Bad address. Use host or host:port, e.g. play.example.net or 1.2.3.4:25566");
+            return 0;
+        }
+        for (FinderServer s : cfg().servers) {
+            if (s.name != null && s.name.equalsIgnoreCase(name)) {
+                err(c, "A server named '" + name + "' already exists.");
+                return 0;
+            }
+        }
+        cfg().servers.add(new FinderServer(name, host, port));
+        PlayerFinder.save();
+        info(c, Component.literal("Added server ").append(Component.literal(name).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" (" + host + ":" + port + "). Run /pf scan to check it.").withStyle(ChatFormatting.GRAY)));
+        return 1;
+    }
+
+    private static int serverRemove(CommandContext<FabricClientCommandSource> c) {
+        String name = StringArgumentType.getString(c, "name");
+        boolean removed = cfg().servers.removeIf(s -> s.name != null && s.name.equalsIgnoreCase(name));
+        if (!removed) {
+            err(c, "No server named '" + name + "'.");
+            return 0;
+        }
+        PlayerFinder.save();
+        info(c, Component.literal("Removed server " + name).withStyle(ChatFormatting.WHITE));
+        return 1;
+    }
+
+    private static int serverList(CommandContext<FabricClientCommandSource> c) {
+        List<FinderServer> servers = cfg().servers;
+        if (servers.isEmpty()) {
+            info(c, Component.literal("No servers yet. Add one: /pf server add <name> <address>").withStyle(ChatFormatting.GRAY));
+            return 1;
+        }
+        c.getSource().sendFeedback(Component.literal("Servers (scanned by /pf scan):").withStyle(ChatFormatting.AQUA));
+        for (FinderServer s : servers) {
+            c.getSource().sendFeedback(Component.literal("  - ").withStyle(ChatFormatting.DARK_GRAY)
+                    .append(Component.literal(s.name).withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal("  " + s.host + ":" + s.port).withStyle(ChatFormatting.GRAY)));
+        }
+        return 1;
+    }
+
+    private static int scan(CommandContext<FabricClientCommandSource> c, String path) {
+        runScan(c.getSource().getClient(), path);
+        return 1;
+    }
+
+    /** Cross-server scan, posting all output to chat. Used by the command and the scan keybind. */
+    public static void runScan(Minecraft client, String path) {
+        FinderConfig cfg = cfg();
+        FinderGroup scope = (path == null) ? cfg.root : GroupTree.resolve(cfg.root, path);
+        if (scope == null) {
+            postErr(client, "No such group: " + path);
+            return;
+        }
+        final List<FinderMember> members = GroupTree.collectMembers(scope, true);
+        if (members.isEmpty()) {
+            postInfo(client, Component.literal("[PF] No players in " + (path == null ? "any group" : path)
+                    + " to search for.").withStyle(ChatFormatting.GRAY));
+            return;
+        }
+
+        boolean haveCurrent = cfg.scanIncludeCurrent && client.getConnection() != null;
+        final List<FinderServer> servers = new ArrayList<>(cfg.servers);
+        if (servers.isEmpty() && !haveCurrent) {
+            postErr(client, "No servers to scan. Add one: /pf server add <name> <address>");
+            return;
+        }
+
+        postInfo(client, Component.literal("[PF] ").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal("Scanning " + servers.size() + " server" + (servers.size() == 1 ? "" : "s")
+                        + " for " + (path == null ? "all groups" : path) + " (" + members.size() + " players)…")
+                        .withStyle(ChatFormatting.GRAY)));
+
+        final List<CompletableFuture<ServerPinger.Result>> futures = new ArrayList<>();
+        for (FinderServer s : servers) {
+            futures.add(ServerPinger.ping(s.host, s.port, cfg.scanTimeoutMs, cfg.scanPasses));
+        }
+
+        final boolean includeCurrent = haveCurrent;
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .whenComplete((v, e) -> client.execute(() -> {
+                    java.util.Set<String> foundKeys = new java.util.HashSet<>();
+
+                    if (includeCurrent) {
+                        OnlineService.Snapshot cur = OnlineService.current();
+                        List<FinderMember> matched = new ArrayList<>();
+                        for (FinderMember m : members) if (cur.isOnline(m)) matched.add(m);
+                        postServerLine(client, "Current server (you)", "tab list", matched, false, null, foundKeys);
+                    }
+
+                    for (int i = 0; i < servers.size(); i++) {
+                        FinderServer s = servers.get(i);
+                        ServerPinger.Result res;
+                        try {
+                            res = futures.get(i).join();
+                        } catch (Exception ex) {
+                            res = null;
+                        }
+                        List<FinderMember> matched = new ArrayList<>();
+                        if (res != null && res.reachable) {
+                            OnlineService.Snapshot snap = OnlineService.snapshotOf(res.sample);
+                            for (FinderMember m : members) if (snap.isOnline(m)) matched.add(m);
+                        }
+                        String label = s.name + " (" + s.host + (s.port != 25565 ? ":" + s.port : "") + ")";
+                        String status;
+                        if (res == null || !res.reachable) {
+                            status = (res != null && res.error != null) ? res.error : "unreachable";
+                        } else if (res.online >= 0) {
+                            status = res.online + (res.max >= 0 ? "/" + res.max : "") + " online";
+                        } else {
+                            status = "online";
+                        }
+                        boolean hidden = res != null && res.sampleHidden;
+                        postServerLine(client, label, status, matched, hidden,
+                                (res == null ? null : res.error), foundKeys);
+                    }
+
+                    postInfo(client, Component.literal("[PF] ").withStyle(ChatFormatting.AQUA)
+                            .append(Component.literal("Found " + foundKeys.size() + " of " + members.size()
+                                    + " online across all scanned servers.").withStyle(ChatFormatting.WHITE)));
+                }));
+    }
+
+    private static void postServerLine(Minecraft client, String label, String status, List<FinderMember> matched,
+                                       boolean sampleHidden, String error, java.util.Set<String> foundKeys) {
+        MutableComponent line = Component.literal("  ▸ ").withStyle(ChatFormatting.DARK_GRAY)
+                .append(Component.literal(label).withStyle(ChatFormatting.WHITE));
+        if (status != null) line.append(Component.literal("  " + status).withStyle(ChatFormatting.DARK_GRAY));
+        postInfo(client, line);
+
+        if (!matched.isEmpty()) {
+            MutableLine names = new MutableLine();
+            for (FinderMember m : matched) {
+                foundKeys.add(memberKey(m));
+                int rgb = PlayerFinder.highlightRgbFor(m.parsedUuid(), m.name);
+                names.append(Txt.colored(m.name == null ? "?" : m.name, rgb >= 0 ? rgb : 0x55FF55));
+            }
+            postInfo(client, names.build());
+        } else if (sampleHidden) {
+            postInfo(client, Component.literal("      (player list hidden — can't check names here)")
+                    .withStyle(ChatFormatting.GRAY));
+        } else if (error != null) {
+            postInfo(client, Component.literal("      (" + error + ")").withStyle(ChatFormatting.GRAY));
+        } else {
+            postInfo(client, Component.literal("      — none from your groups").withStyle(ChatFormatting.DARK_GRAY));
+        }
+    }
+
+    private static String memberKey(FinderMember m) {
+        UUID u = m.parsedUuid();
+        if (u != null) return FinderMember.uuidKey(u);
+        return FinderMember.nameKey(m.name == null ? "" : m.name);
     }
 
     private static int importMctiers(CommandContext<FabricClientCommandSource> c, int tier, int count) {

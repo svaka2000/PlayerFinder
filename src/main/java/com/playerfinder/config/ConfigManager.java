@@ -36,9 +36,12 @@ public final class ConfigManager {
             PlayerFinder.LOGGER.warn("[PlayerFinder] Failed to load config, using defaults", e);
             config = new FinderConfig();
         }
-        // Defensive: never leave the tree null after a hand-edited/partial file.
+        // Defensive: never leave collections null after a hand-edited/partial file.
         if (config.root == null) config.root = new FinderGroup("root");
         if (config.root.groups == null) config.root.groups = new java.util.ArrayList<>();
+        if (config.servers == null) config.servers = new java.util.ArrayList<>();
+        if (config.scanTimeoutMs <= 0) config.scanTimeoutMs = 3000;
+        if (config.scanPasses <= 0) config.scanPasses = 3;
         save();   // normalise on disk (and create the file on first run)
     }
 

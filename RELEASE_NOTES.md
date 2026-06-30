@@ -1,25 +1,27 @@
-## PlayerFinder v1.0.0
+## PlayerFinder v1.1.0
 
-Find the players you actually want to play with. Organize people into named **groups** with nested **sub-groups**, then instantly see who's online, highlight their nametags, or hide everyone else.
+Adds **cross-server search**: find which of your grouped players are online on *other* servers, not just the one you're on.
 
-### Features
-- **Groups & sub-groups** — arbitrarily nested (`pvp.sword.t2`), each with its own colour.
-- **Who's online** — `/pf online [group]` shows which members are on the current server (reads the tab list), plus an optional on-screen HUD panel.
-- **Highlight** — recolours group members' nametags so they stand out in a lobby.
-- **Hide everyone but them** — `/pf solo <group>` to isolate your targets; `/pf unsolo` to undo.
-- **MCTiers import** — `/pf import mctiers <gamemode> [tier]` pulls a whole tier list (e.g. every T2 sword player) into a group. Gamemodes: sword, axe, mace, pot, nethop, smp, uhc, vanilla.
-- Four optional keybinds (Options → Controls → PlayerFinder) and a Mod Menu settings screen.
+### New
+- **`/pf scan [group]`** — checks a customizable list of servers (plus your current one) and reports which of your players are online and where.
+- **`/pf server add <name> <address>`**, **`/pf server list`**, **`/pf server remove <name>`** — manage the scan list. Addresses accept `host` or `host:port`, and **SRV records** are resolved (so `play.example.net` just works).
+- A new **Scan servers** keybind (Options → Controls → PlayerFinder).
+- Config: `scanTimeoutMs`, `scanPasses` (multi-ping sample union, default 3), `scanIncludeCurrent`.
+
+### How it works & its limit
+Scanning uses the **Server List Ping** — the same status request your multiplayer screen makes for the player count. It never connects/logs in and sends no gameplay packets. Servers only publish a small **sample** of online names (~12 on vanilla); PlayerFinder pings a few times and merges them to catch more. **Big networks (Hypixel, etc.) hide or fake the sample** — there you'll see the online count but the line says *"player list hidden."* On smaller / practice / vanilla-style servers that expose the sample, specific players are detected reliably. (Wire protocol + SRV verified against real servers.)
+
+### Everything from v1.0.0
+Nested player groups, who's-online on the current server, nametag highlight, hide-everyone-but-them (solo), MCTiers tier-list import, on-screen HUD, Mod Menu screen.
 
 ### Downloads
-Pick the jar for your Minecraft version (Fabric + Fabric API required):
+Fabric + Fabric API required. Pick your version:
 
 | Minecraft | Jar |
 |---|---|
-| 1.21.4 | `playerfinder-1.0.0+1.21.4.jar` |
-| 1.21.10 | `playerfinder-1.0.0+1.21.10.jar` |
-| 1.21.11 | `playerfinder-1.0.0+1.21.11.jar` |
+| 1.21.4 | `playerfinder-1.1.0+1.21.4.jar` |
+| 1.21.10 | `playerfinder-1.1.0+1.21.10.jar` |
+| 1.21.11 | `playerfinder-1.1.0+1.21.11.jar` |
 
 ### Not a cheat
-Client-side, render/info only. It reads the in-game tab list and the public MCTiers API and **sends no packets** — the server can't tell it's installed. Highlight only recolours nametags of players you can already see (no X-ray/ESP, no glow-through-walls, no tracers). "Hide others" only stops your own client from drawing other players. It changes what you see, not the game.
-
-See the [README](https://github.com/svaka2000/PlayerFinder#readme) for the full command list.
+Client-side, render/info only — reads the tab list, the public MCTiers API, and server status pings; sends no gameplay packets. No X-ray/ESP. See the [README](https://github.com/svaka2000/PlayerFinder#readme).

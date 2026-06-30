@@ -37,7 +37,8 @@ Core:
 - `core/GroupTree` — dot-separated path ops, recursive member collection, colour inheritance.
 - `core/OnlineService` — reads the tab list (`ClientPacketListener.getOnlinePlayers()`).
 - `mctiers/MCTiersClient` — async `java.net.http` GET to `mctiers.com/api/v2/mode/{gamemode}` (object keyed by tier → players).
-- `command/FinderCommands` — Brigadier `/pf` tree (fabric client-command API v2).
+- `net/ServerPinger` — raw-socket **Server List Ping** (status handshake) to scan other servers, off-thread on a daemon pool, multi-pass sample union. `net/SrvResolver` — JNDI DNS `_minecraft._tcp` SRV lookup. Used by `/pf scan`. Wire protocol verified against real servers (Hypixel/CubeCraft/Mineplex/Wynncraft); confirms big networks hide/fake the sample (we surface count + "list hidden").
+- `command/FinderCommands` — Brigadier `/pf` tree (fabric client-command API v2); `/pf server …` + `/pf scan` for cross-server search.
 - `hud/FinderHud` — the online panel.
 - `gui/FinderScreen` + `compat/ModMenuIntegration` — settings screen.
 
@@ -48,12 +49,13 @@ Mixins (all `src/main`, stable targets):
 
 ## Anti-cheat contract (keep this line)
 
-Render/info only. Reads only the tab list + public MCTiers API; sends **no** packets. Highlight only recolours nametags of players already visible (NOT through-walls ESP — no glow/boxes/tracers). Solo only suppresses local rendering of other players (removes info, never touches positions/hitboxes/reach). This is the legit cousin of the previously-declined injectable cheat client — do **not** add wallhack glow, tracers, reach, or anything that sends/forges packets.
+Render/info only. Reads only the tab list + public MCTiers API + Server List Ping status of user-listed servers (the same status request the multiplayer screen makes — no login/join, no gameplay packets). Sends **no** gameplay packets. Highlight only recolours nametags of players already visible (NOT through-walls ESP — no glow/boxes/tracers). Solo only suppresses local rendering of other players (removes info, never touches positions/hitboxes/reach). This is the legit cousin of the previously-declined injectable cheat client — do **not** add wallhack glow, tracers, reach, or anything that sends/forges gameplay packets.
 
 ## Status
 
 - ✅ Compiles for 1.21.4 / 1.21.10 / 1.21.11; mixins resolve; jars well-formed (entrypoints, mixins, icon, lang packaged).
-- ⚠️ Not yet run in a live client — the in-world highlight (does `getDisplayName` recolour reach the floating nametag on every version?) and the HUD layout want one play-test + tuning. MCTiers endpoint verified live against the real v2 API.
+- ✅ MCTiers v2 endpoint + SLP wire protocol + SRV resolution all verified live against real servers.
+- ⚠️ Not yet run in a live client — the in-world highlight (does `getDisplayName` recolour reach the floating nametag on every version?) and the HUD layout want one play-test + tuning.
 
 ## Possible next steps (if Weilin asks)
 

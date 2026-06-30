@@ -35,6 +35,18 @@ public final class OnlineService {
         }
     }
 
+    /** Build a match snapshot from an arbitrary set of players (e.g. a server-ping sample). */
+    public static Snapshot snapshotOf(java.util.Collection<FinderMember> members) {
+        Set<UUID> uuids = new HashSet<>();
+        Set<String> names = new HashSet<>();
+        for (FinderMember m : members) {
+            UUID u = m.parsedUuid();
+            if (u != null) uuids.add(u);
+            if (m.name != null) names.add(m.name.toLowerCase(Locale.ROOT));
+        }
+        return new Snapshot(uuids, names);
+    }
+
     public static Snapshot current() {
         Set<UUID> uuids = new HashSet<>();
         Set<String> names = new HashSet<>();

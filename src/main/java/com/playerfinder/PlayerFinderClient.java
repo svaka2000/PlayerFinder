@@ -42,12 +42,14 @@ public class PlayerFinderClient implements ClientModInitializer {
         final KeyMapping kSolo = register("key.playerfinder.toggle_solo");
         final KeyMapping kHud = register("key.playerfinder.toggle_hud");
         final KeyMapping kOnline = register("key.playerfinder.who_online");
+        final KeyMapping kScan = register("key.playerfinder.scan");
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (kHighlight != null) while (kHighlight.consumeClick()) toggleHighlight(client);
             if (kHud != null) while (kHud.consumeClick()) toggleHud(client);
             if (kSolo != null) while (kSolo.consumeClick()) toggleSolo(client);
             if (kOnline != null) while (kOnline.consumeClick()) FinderCommands.printOnline(client, null);
+            if (kScan != null) while (kScan.consumeClick()) FinderCommands.runScan(client, null);
         });
 
         PlayerFinder.LOGGER.info("[PlayerFinder] ready — {} top-level group(s)", cm.get().root.groups.size());

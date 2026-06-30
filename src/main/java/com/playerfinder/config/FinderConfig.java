@@ -1,14 +1,30 @@
 package com.playerfinder.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Everything PlayerFinder persists to {@code config/playerfinder.json}: the group tree plus a handful
- * of display toggles. Render-only data — no server interaction is configured here.
+ * Everything PlayerFinder persists to {@code config/playerfinder.json}: the group tree, a handful of
+ * display toggles, and the list of servers to scan. Render/info-only data — no game interaction.
  */
 public class FinderConfig {
-    public int configVersion = 1;
+    public int configVersion = 2;
 
     /** Hidden container; {@code root.groups} are the top-level groups. */
     public FinderGroup root = new FinderGroup("root");
+
+    /** Servers to query with {@code /pf scan} (Server List Ping — no connecting/joining). */
+    public List<FinderServer> servers = new ArrayList<>();
+
+    /** Per-server connect/read timeout for scanning, in milliseconds. */
+    public int scanTimeoutMs = 3000;
+
+    /** How many ping passes per server. Vanilla returns a random ~12-name sample each ping, so unioning
+     *  a few passes surfaces more of a busy server's player list. */
+    public int scanPasses = 3;
+
+    /** Include the server you're currently on (read from the full tab list) in scan results. */
+    public boolean scanIncludeCurrent = true;
 
     /** Master switch for nametag highlighting. */
     public boolean globalHighlight = true;
