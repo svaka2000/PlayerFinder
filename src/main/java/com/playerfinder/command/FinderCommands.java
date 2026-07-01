@@ -501,7 +501,8 @@ public final class FinderCommands {
 
         final List<CompletableFuture<ServerPinger.Result>> futures = new ArrayList<>();
         for (FinderServer s : servers) {
-            futures.add(ServerPinger.ping(s.host, s.port, cfg.scanTimeoutMs, cfg.scanPasses));
+            futures.add(ServerPinger.ping(s.host, s.port, cfg.scanTimeoutMs,
+                    cfg.scanPasses, cfg.scanMaxPings, cfg.scanStableRounds, cfg.scanPingDelayMs, cfg.scanUseQuery));
         }
 
         final boolean includeCurrent = haveCurrent;
@@ -533,10 +534,19 @@ public final class FinderCommands {
                         String status;
                         if (res == null || !res.reachable) {
                             status = (res != null && res.error != null) ? res.error : "unreachable";
-                        } else if (res.online >= 0) {
-                            status = res.online + (res.max >= 0 ? "/" + res.max : "") + " online";
                         } else {
-                            status = "online";
+                            String base = (res.online >= 0)
+                                    ? res.online + (res.max >= 0 ? "/" + res.max : "") + " online" : "online";
+                            String cov;
+                            if (res.viaQuery) {
+                                cov = " · full list via query";
+                            } else if (!res.sample.isEmpty()) {
+                                cov = " · saw " + res.sample.size() + " name" + (res.sample.size() == 1 ? "" : "s")
+                                        + " over " + res.pings + " pings";
+                            } else {
+                                cov = "";
+                            }
+                            status = base + cov;
                         }
                         boolean hidden = res != null && res.sampleHidden;
                         postServerLine(client, label, status, matched, hidden,

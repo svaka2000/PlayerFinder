@@ -135,13 +135,16 @@ Add the servers you care about, then `/pf scan` checks **all** of them at once (
 [PF] Found 3 of 4 online across all scanned servers.
 ```
 
-**How it works & its limit (read this):** scanning uses the **Server List Ping** — the exact status request your multiplayer screen makes to show a server's player count. It does **not** connect or log in. The catch is that a server only returns a small **sample** of online names (≈12 on vanilla), and big networks (Hypixel, etc.) **hide or fake** the sample. So:
+**How it works & getting past the 12-name cap (read this):** scanning uses the **Server List Ping** — the exact status request your multiplayer screen makes to show a server's player count. It does **not** connect or log in. A server only returns a small **sample** of online names (≈12 on vanilla) per ping, so PlayerFinder gets past that cap two ways:
 
-- On **smaller / practice / vanilla-style servers** that expose the sample, `/pf scan` reliably finds specific players. PlayerFinder pings each server a few times (`scanPasses`, default 3) and merges the samples to catch more of a busy list.
-- On **big networks** that hide the sample, you'll still see the **online count**, but the line will say *"player list hidden — can't check names here."* There is no client-side way around a server choosing not to publish its player list.
-- Addresses are resolved via **SRV records**, so `play.example.net` works just like in the vanilla server list.
+1. **Adaptive multi-ping** — vanilla/Paper servers return a *different random* 12 each ping, so PlayerFinder keeps pinging and **merges the samples** until the list stops growing (or it has everyone). On servers that expose a real rotating sample this enumerates far more than 12 — up to the **full** online list. It stops early once converged, so it doesn't waste pings.
+2. **Query protocol** — if a server has `enable-query=true`, PlayerFinder pulls its **entire** player list in one shot over UDP (no 12-cap at all). Most servers leave this off, but it's checked automatically and used when available.
 
-`scanTimeoutMs`, `scanPasses` and `scanIncludeCurrent` are tunable in the config.
+The scan line tells you which happened, e.g. `73/500 online · saw 96 names over 22 pings` or `full list via query`.
+
+**The one hard limit:** some big networks (Hypixel, etc.) send an **empty or fake** sample *and* disable query — they simply never transmit their player list. There you'll still see the **online count**, but the line says *"player list hidden — can't check names here."* No client-side mod can invent data the server refuses to send. On smaller / practice / vanilla-style servers (where you actually hunt duels), it works great.
+
+Addresses are resolved via **SRV records**, so `play.example.net` works just like the vanilla server list. Tunables in the config: `scanTimeoutMs`, `scanPasses` (min pings), `scanMaxPings`, `scanStableRounds`, `scanPingDelayMs`, `scanUseQuery`, `scanIncludeCurrent`.
 
 ## The on-screen HUD
 

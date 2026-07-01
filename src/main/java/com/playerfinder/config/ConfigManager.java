@@ -42,6 +42,9 @@ public final class ConfigManager {
         if (config.servers == null) config.servers = new java.util.ArrayList<>();
         if (config.scanTimeoutMs <= 0) config.scanTimeoutMs = 3000;
         if (config.scanPasses <= 0) config.scanPasses = 3;
+        if (config.scanMaxPings < config.scanPasses) config.scanMaxPings = Math.max(config.scanPasses, 40);
+        if (config.scanStableRounds <= 0) config.scanStableRounds = 5;
+        if (config.scanPingDelayMs < 0) config.scanPingDelayMs = 150;
         save();   // normalise on disk (and create the file on first run)
     }
 

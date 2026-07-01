@@ -37,7 +37,7 @@ Core:
 - `core/GroupTree` — dot-separated path ops, recursive member collection, colour inheritance.
 - `core/OnlineService` — reads the tab list (`ClientPacketListener.getOnlinePlayers()`).
 - `mctiers/MCTiersClient` — async `java.net.http` GET to `mctiers.com/api/v2/mode/{gamemode}` (object keyed by tier → players).
-- `net/ServerPinger` — raw-socket **Server List Ping** (status handshake) to scan other servers, off-thread on a daemon pool, multi-pass sample union. `net/SrvResolver` — JNDI DNS `_minecraft._tcp` SRV lookup. Used by `/pf scan`. Wire protocol verified against real servers (Hypixel/CubeCraft/Mineplex/Wynncraft); confirms big networks hide/fake the sample (we surface count + "list hidden").
+- `net/ServerPinger` — raw-socket **Server List Ping** (status handshake) to scan other servers, off-thread on a daemon pool. **Adaptive union** to beat the ~12-name sample cap: one ping for online/max, an optional Query pull, then repeated SLP pings merging the random sample until it converges (`online <= collected`) or `scanStableRounds` no-growth passes / `scanMaxPings` hit. Drops nil-UUID decorative sample entries. `net/QueryClient` — GameSpy GS4 **Query** (UDP full-stat) → full player list where `enable-query=true`. `net/SrvResolver` — JNDI DNS `_minecraft._tcp` SRV lookup. Wire protocol + SRV verified against real servers; adaptive convergence + query parser unit-tested. Hard wall stands: servers that hide the sample AND disable query transmit no names (we surface count + "list hidden").
 - `command/FinderCommands` — Brigadier `/pf` tree (fabric client-command API v2); `/pf server …` + `/pf scan` for cross-server search.
 - `hud/FinderHud` — the online panel.
 - `gui/FinderScreen` + `compat/ModMenuIntegration` — settings screen.

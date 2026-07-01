@@ -1,27 +1,27 @@
-## PlayerFinder v1.1.0
+## PlayerFinder v1.2.0
 
-Adds **cross-server search**: find which of your grouped players are online on *other* servers, not just the one you're on.
+Gets **past the ~12-name Server List Ping cap** on cross-server scans — two ways.
 
-### New
-- **`/pf scan [group]`** — checks a customizable list of servers (plus your current one) and reports which of your players are online and where.
-- **`/pf server add <name> <address>`**, **`/pf server list`**, **`/pf server remove <name>`** — manage the scan list. Addresses accept `host` or `host:port`, and **SRV records** are resolved (so `play.example.net` just works).
-- A new **Scan servers** keybind (Options → Controls → PlayerFinder).
-- Config: `scanTimeoutMs`, `scanPasses` (multi-ping sample union, default 3), `scanIncludeCurrent`.
+### New in scanning
+- **Adaptive multi-ping** — vanilla/Paper servers return a *different random* ~12-name sample each ping, so `/pf scan` now keeps pinging and **merges the samples until the list converges** (or it has everyone), then stops. On servers that expose a real rotating sample this enumerates far past 12 — up to the **full** online list. (Verified: a 30-player rotating server → all 30; a 200-player → ~196.)
+- **Query protocol** — if a server has `enable-query=true`, PlayerFinder pulls its **entire** player list in one UDP request (no cap at all). Checked automatically, used when available.
+- Scan lines now show how the list was obtained, e.g. `73/500 online · saw 96 names over 22 pings` or `· full list via query`.
+- New config knobs: `scanPasses` (min pings), `scanMaxPings`, `scanStableRounds`, `scanPingDelayMs`, `scanUseQuery`.
 
-### How it works & its limit
-Scanning uses the **Server List Ping** — the same status request your multiplayer screen makes for the player count. It never connects/logs in and sends no gameplay packets. Servers only publish a small **sample** of online names (~12 on vanilla); PlayerFinder pings a few times and merges them to catch more. **Big networks (Hypixel, etc.) hide or fake the sample** — there you'll see the online count but the line says *"player list hidden."* On smaller / practice / vanilla-style servers that expose the sample, specific players are detected reliably. (Wire protocol + SRV verified against real servers.)
+### The one hard limit (unchanged, and unfixable client-side)
+Some big networks (Hypixel, etc.) send an **empty or fake** sample **and** disable query — they never transmit their player list at all. There you'll see the online **count** but *"player list hidden — can't check names here."* No client mod can invent data a server refuses to send. On smaller / practice / vanilla-style servers, `/pf scan` now sees the whole list.
 
-### Everything from v1.0.0
-Nested player groups, who's-online on the current server, nametag highlight, hide-everyone-but-them (solo), MCTiers tier-list import, on-screen HUD, Mod Menu screen.
+### Everything from before
+Nested player groups, who's-online on the current server, nametag highlight, hide-everyone-but-them (solo), MCTiers tier-list import, cross-server search, on-screen HUD, Mod Menu screen.
 
 ### Downloads
-Fabric + Fabric API required. Pick your version:
+Fabric + Fabric API required.
 
 | Minecraft | Jar |
 |---|---|
-| 1.21.4 | `playerfinder-1.1.0+1.21.4.jar` |
-| 1.21.10 | `playerfinder-1.1.0+1.21.10.jar` |
-| 1.21.11 | `playerfinder-1.1.0+1.21.11.jar` |
+| 1.21.4 | `playerfinder-1.2.0+1.21.4.jar` |
+| 1.21.10 | `playerfinder-1.2.0+1.21.10.jar` |
+| 1.21.11 | `playerfinder-1.2.0+1.21.11.jar` |
 
 ### Not a cheat
-Client-side, render/info only — reads the tab list, the public MCTiers API, and server status pings; sends no gameplay packets. No X-ray/ESP. See the [README](https://github.com/svaka2000/PlayerFinder#readme).
+Client-side, read-only status/query protocols (the same ones server-list pingers and trackers use) — no login/join, no gameplay packets, no X-ray/ESP. See the [README](https://github.com/svaka2000/PlayerFinder#readme).

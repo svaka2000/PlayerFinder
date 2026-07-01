@@ -54,17 +54,30 @@ public final class ServerPinger {
         public final List<FinderMember> sample = new ArrayList<>();
         /** Reachable with players online, but the server returned no usable sample names. */
         public boolean sampleHidden;
+        /** How many SLP passes we ended up sending. */
+        public int pings;
+        /** True if the full player list came from the Query protocol (no 12-name cap). */
+        public boolean viaQuery;
         /** Non-null on failure (timeout / unknown host / refused). */
         public String error;
     }
 
-    /** Ping {@code passes} times (unioning the random samples), off the game thread. */
-    public static CompletableFuture<Result> ping(String host, int port, int timeoutMs, int passes) {
-        return CompletableFuture.supplyAsync(() -> pingBlocking(host, port, timeoutMs, Math.max(1, passes)), POOL);
+    /** Scan a server off the game thread: one SLP ping, then (optionally) a full-list Query, then
+     *  adaptive SLP passes that union the random ~12-name samples until the list converges — which is
+     *  how we get past the per-ping 12-name cap on servers that expose a real, rotating sample. */
+    public static CompletableFuture<Result> ping(String host, int port, int timeoutMs,
+                                                 int minPings, int maxPings, int stableRounds,
+                                                 int delayMs, boolean useQuery) {
+        return CompletableFuture.supplyAsync(
+                () -> pingBlocking(host, port, timeoutMs, minPings, maxPings, stableRounds, delayMs, useQuery),
+                POOL);
     }
 
-    private static Result pingBlocking(String host, int port, int timeoutMs, int passes) {
+    private static Result pingBlocking(String host, int port, int timeoutMs, int minPings, int maxPings,
+                                       int stableRounds, int delayMs, boolean useQuery) {
         Result r = new Result();
+        minPings = Math.max(1, minPings);
+        maxPings = Math.max(minPings, maxPings);
 
         // Resolve SRV once (most public servers publish host+port this way); fall back to host:port.
         String connectHost = host;
@@ -76,25 +89,70 @@ public final class ServerPinger {
         }
 
         Map<String, FinderMember> union = new LinkedHashMap<>();
-        for (int i = 0; i < passes; i++) {
-            try {
-                Result one = pingOnce(connectHost, connectPort, host, port, timeoutMs);
-                r.reachable = true;
-                if (one.online >= 0) r.online = one.online;
-                if (one.max >= 0) r.max = one.max;
-                for (FinderMember m : one.sample) {
-                    String key = m.uuid != null ? m.uuid.toLowerCase(Locale.ROOT)
-                            : "name:" + (m.name == null ? "" : m.name.toLowerCase(Locale.ROOT));
-                    union.putIfAbsent(key, m);
-                }
-                r.error = null;
-            } catch (Exception e) {
-                if (!r.reachable) r.error = friendly(e);
+
+        // 1) First SLP ping — reachability + online/max + an initial sample.
+        try {
+            Result one = pingOnce(connectHost, connectPort, host, port, timeoutMs);
+            r.reachable = true;
+            r.online = one.online;
+            r.max = one.max;
+            mergeSample(union, one.sample);
+            r.pings = 1;
+        } catch (Exception e) {
+            r.error = friendly(e);
+        }
+
+        // 2) Query protocol (full list in one shot) if the server allows it.
+        if (useQuery && r.reachable) {
+            List<String> queryNames = QueryClient.fullStatPlayers(connectHost, connectPort, timeoutMs);
+            if (!queryNames.isEmpty()) {
+                for (String nm : queryNames) mergeSample(union, List.of(new FinderMember(nm, null)));
+                r.viaQuery = true;
             }
         }
+
+        // 3) Adaptive SLP passes: keep unioning random samples until the list converges. Skip if the
+        //    query already gave us the whole list, or the server isn't reachable.
+        boolean haveAll = r.viaQuery && r.online >= 0 && union.size() >= r.online;
+        if (r.reachable && !haveAll) {
+            int stable = 0;
+            while (r.pings < maxPings) {
+                if (r.online >= 0 && union.size() >= r.online) break;          // got everyone
+                if (r.pings >= minPings && stable >= stableRounds) break;       // sample converged
+                if (delayMs > 0) {
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                int before = union.size();
+                try {
+                    Result one = pingOnce(connectHost, connectPort, host, port, timeoutMs);
+                    if (one.online >= 0) r.online = one.online;
+                    if (one.max >= 0) r.max = one.max;
+                    mergeSample(union, one.sample);
+                } catch (Exception ignored) {
+                    // transient mid-scan failure — treat as a no-growth pass
+                }
+                r.pings++;
+                if (union.size() > before) stable = 0;
+                else stable++;
+            }
+        }
+
         r.sample.addAll(union.values());
         r.sampleHidden = r.reachable && r.online > 0 && r.sample.isEmpty();
         return r;
+    }
+
+    private static void mergeSample(Map<String, FinderMember> union, List<FinderMember> add) {
+        for (FinderMember m : add) {
+            String key = m.uuid != null ? m.uuid.toLowerCase(Locale.ROOT)
+                    : "name:" + (m.name == null ? "" : m.name.toLowerCase(Locale.ROOT));
+            union.putIfAbsent(key, m);
+        }
     }
 
     private static Result pingOnce(String connectHost, int connectPort, String handshakeHost,
@@ -152,6 +210,8 @@ public final class ServerPinger {
                         String name = s.has("name") && !s.get("name").isJsonNull() ? s.get("name").getAsString() : null;
                         String id = s.has("id") && !s.get("id").isJsonNull() ? s.get("id").getAsString() : null;
                         if (name != null) name = name.replaceAll("§.", "").trim(); // strip colour codes
+                        // Drop decorative MOTD-in-sample entries (real players never carry the nil UUID).
+                        if (id != null && id.replace("-", "").matches("0{32}")) continue;
                         if ((name == null || name.isEmpty()) && id == null) continue;
                         r.sample.add(new FinderMember(name, id));
                     }
